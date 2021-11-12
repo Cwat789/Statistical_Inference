@@ -1,0 +1,101 @@
+---
+title: "Exponential Distribution Central Limit Therom Analysis"
+output: html_notebook
+---
+```{r}
+library(ggplot2)
+```
+
+# Exponential Distributions
+
+
+## Varying Lambda: 
+### Sample Means vs Theoritical Mean
+
+Theoretical mean of PDF
+
+dexp(x,rate) = rate * e ^ (-rate * x)
+
+with theoretical mean E[X] = 1 / rate
+```{r,echo=FALSE}
+mk_exp_distribution_df <- function(sample_sizes = c(5,10,100), r = seq(0.2, 10, by = 0.2) ){
+  data <- data.frame(
+    sample_size=NULL,
+    sample_mean=NULL,
+    sample_variance=NULL,
+    theoretical_mean = NULL,
+    theoretical_variance = NULL
+  )
+  
+  for (i in 1:length(sample_sizes))
+  {
+    n = sample_sizes[i]
+    sample_mean = NULL
+    sample_var = NULL
+    theoretical_mean = NULL
+    theoretical_var = NULL
+    
+    for (rate in r) {
+      sample_mean = c(sample_mean, mean(rexp(n,rate = rate)))
+      sample_var = c(sample_var, var(rexp(n,rate = rate)))
+      theoretical_mean = c(theoretical_mean,1/rate)
+      theoretical_var = c(theoretical_var,(1/rate)^2)
+    }
+    data <- data.frame(
+      sample_size=c(data$sample_size,rep(n,length(r))),
+      lambda=c(data$lambda,r),
+      sample_mean=c(data$sample_mean,sample_mean),
+      sample_variance=c(data$sample_variance,sample_var),
+      theoretical_mean = c(data$theoretical_mean,theoretical_mean),
+      theoretical_variance = c(data$theoretical_variance,theoretical_var)
+    )
+  }
+  return(data)
+}
+```
+
+```{r,echo=FALSE}
+data <- mk_exp_distribution_df(sample_sizes = c(5,20,100))
+data$sample_size <- as.factor(data$sample_size)
+ggplot(data, aes(x=lambda, y=sample_mean,color=sample_size)) + geom_point(size=2)+ geom_line(aes(x=lambda, y=theoretical_mean,color="Theoretical Mean")) + ggtitle("Lambda vs Sample Mean")
+```
+### Sample Means vs Theoritical Variance
+
+```{r}
+ggplot(data, aes(x=lambda, y=sample_variance,color=sample_size)) + geom_point(size=2)+ geom_line(aes(x=lambda, y=theoretical_variance,color="Theoretical Variance")) + ggtitle("Lambda vs Sample Variance")
+```
+## Does the Central Limit Theorm hold?
+
+```{r, warning=FALSE}
+sm1 = rexp(10000)
+sm10 = NULL
+sm100 = NULL
+for (i in 1 : 10000) sm10 = c(sm10, mean(rexp(10)))
+for (i in 1 : 10000) sm100 = c(sm100, mean(rexp(100)))
+
+data <- data.frame(
+  sample_size=c( rep("n = 1",10000), rep("n = 10",10000), rep("n = 100",10000)),
+  mean=c(sm1,sm10,sm100)
+)
+data$sample_size <- as.factor(data$sample_size)
+
+ggplot(data,aes(x=mean, fill=sample_size)) +
+  ggtitle("Distributions: Mean of n Samples from Exp. Dist [bar] vs Normal Dist [line]") +
+  geom_histogram(aes( y=..density..),
+                 binwidth = .1,
+                 xlim=c(0,5),
+                 color="#e9ecef", alpha=0.6, position = 'identity') +
+  labs(fill="")+
+  stat_function(fun = dnorm, args = list(mean = 1, sd = 1/sqrt(1)),aes(color = "n = 1")) +
+  stat_function(fun = dnorm, args = list(mean = 1, sd = 1/sqrt(10)),aes(color = "n = 10")) +
+  stat_function(fun = dnorm, args = list(mean = 1, sd = 1/sqrt(100)),aes(color = "n = 100")) 
+```
+
+```{r,echo=FALSE}
+ggplot(data,aes(mean,sample_size)) + 
+  geom_boxplot(outlier.colour = "red",outlier.alpha = 0.05) + 
+  geom_vline(xintercept=1, linetype="dashed")
+```
+
+
+

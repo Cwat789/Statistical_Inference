@@ -1,0 +1,155 @@
+---
+title: "ToothGrowth Statistical Infrence Analysis"
+output: html_notebook
+---
+
+In this notebook we will be performing a statistical analysis on the results of a ToothGrowth study. To begin this study, we will use the r programming language examine documents about the data source, perform exploratory analysis on the data set,and draw conclusions from the data via hypothesis testing.
+```{r}
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+options(max.print = 50)        # Change global options
+
+df = ToothGrowth
+```
+
+
+## Data Source Information
+### The Effect of Vitamin C on Tooth Growth in Guinea Pigs
+*Description*
+The response is the length of odontoblasts (cells responsible for tooth growth) in 60 guinea pigs. Each animal received one of three dose levels of vitamin C (0.5, 1, and 2 mg/day) by one of two delivery methods, orange juice or ascorbic acid (a form of vitamin C and coded as VC).
+
+*Source*
+C. I. Bliss (1952). _The Statistics of Bioassay_. Academic Press.
+
+```{r}
+# View information on data source via help function
+help(ToothGrowth)
+
+```
+
+## Examining Dataset
+
+```{r}
+head(df)
+```
+
+We can see the _dose_ column is treated as a _dbl_ [Double], but in the context of the study is a categorical variable. To make this change, we convert dose to a _fctr_ [Factor]
+```{r}
+df$dose = as.factor(df$dose)
+# head(df) # Validation
+```
+
+## Provide a basic summary
+```{r}
+summary(df)
+```
+
+# Hypothesis Testing
+
+## T-test using p-values
+
+We fill first pull all of the p-values of various comparisons, test their significance, and draw conclusions based on their results. We will group and compare all observations at once. results can be mapped back to their observation via their _rank_ index.
+
+We will be performing a two-sided t-test with a significance threshold of alpha for this study. Lets look at the significant results of a standard p-value analysis with a chosen signifance threshold of alpha = 5%.
+
+```{r}
+
+
+df$id = paste(df$supp,df$dose,sep="-")
+possible_combos <- merge(x = unique(df$id), y = unique(df$id), by = NULL)
+possible_combos <- possible_combos[ which(possible_combos$x != possible_combos$y), ]
+possible_combos <- possible_combos[order(possible_combos$x),]
+
+rt <- NULL
+rt <- data.frame(
+  rank=NULL,
+  sample1=NULL,
+  sample2=NULL,
+  pval=NULL
+)
+for (i in 1:nrow(possible_combos)){
+  x = possible_combos$x[i]
+  y = possible_combos$y[i]
+  study_a = df[df$id %in% x,]
+  study_b = df[df$id %in% y,]
+  output <- t.test(study_a$len, study_b$len, alternative = "two.sided", paired = FALSE, var.equal = FALSE, conf.level = 0.95)
+  rt <-data.frame(
+    rank=c(rt$rank,""),
+    sample1=c(rt$sample1,x),
+    sample2=c(rt$sample2,y),
+    pval=c(rt$pval,output$p.value)
+  )
+}
+# Remove duplicates combinations
+rt <- rt[!duplicated(rt$pval), ]
+# Index the results by ranking 
+rt <- rt[order(rt$pval),]
+rt$rank <- 1:nrow(rt)
+rt$rank = as.factor(rt$rank)
+
+print(rt)
+```
+```{r}
+# Plot
+pval_by_index <- suppressMessages(melt(rt))
+ggplot(pval_by_index, aes(x=rank,y=value, colour = variable)) + geom_point(position = position_dodge(width = .3))+ geom_hline(yintercept=alpha)
+```
+All but two results are considered significant at a 5% threshold. However, with a 5% significance threshold for each result, false positives become more likely with more tests.
+
+## Adjusting for Multiple testing
+
+To further reduce the probability of multiple testing bias, we will perform bonferroni and BH pval adjustments. Now we have a list of p-values for each study (found vial the t.test function). We will compare these versus a significance level of alpha = 0.05. This means that the probably of detecting a significant result in the two comparisons, assuming there is no correlation, there would be a 5% of making the given observation.
+
+Multiple testing considerations will be made as well via adjusted p-values [Reference: https://www.coursera.org/learn/statistical-inference/lecture/7c7Ns/12-01-multiple-comparisons]
+
+```{r}
+alpha <- 0.05
+
+# Calculate Adjusted P values
+rt$pval_bh <- p.adjust(rt$pval, method = "BH")
+rt$pval_bonf <- p.adjust(rt$pval, method = "bonferroni")
+
+# Plot
+pval_by_index <- suppressMessages(melt(rt))
+ggplot(pval_by_index, aes(x=rank,y=value, colour = variable)) + geom_point(position = position_dodge(width = .3))+ geom_hline(yintercept=alpha)
+
+```
+# Drawing Conclusions
+
+## Significance of Max Dosage OJ vs Max Dosage VC
+
+Now that the leg work is done, we can quickly ask questions to and find the answers in the results table. For example: a major question would be does the max does of OJ and VC have a significant difference. We can find the results for the test of *OJ-2 & VC-2*'s significance at rank id number *15*.
+
+> A note on 'tests_passed': We are able to store all three tests on 1 table without losing information. p-val bh > p-val bonf > pval raw in all cases by definition, therefore, for raw p test passes have tests_passed values >=1 [1,2, or 3], all Bonf test_passes will be >=2 , and all bh test passes will have tests_passed == 3.
+
+
+```{r}
+# Compare various p-values to acceptance criteria alpha
+rt$tests_passed <- (rt$pval < alpha) + (rt$pval_bonf < alpha) + (rt$pval_bh < alpha)
+rt <- rt[order(rt$rank,decreasing = TRUE),]
+rt
+
+```
+The OJ-2 and VC-2 variations in sample means were not significant enough by any of our tests so fail to reject the hypothesis that there is no difference in the two population's means.
+
+## Significance of Increasing Dosages of the Same Suppliment
+We can look up:
+
+sample1 sample2   rank
+OJ-2    OJ-1      12
+OJ-2    OJ-0.5    6
+OJ-1    OJ-0.5    8
+
+VC-2    VC-1      9
+VC-2    VC-0.5    3
+VC1-1   VC-0.5    5
+
+```{r}
+rt <- rt[order(rt$rank,decreasing = FALSE),]
+rt
+```
+
+From the results table, under the BH assumption all changes of dosage tested of a given supplement resulted in a statistically significant change in tooth growth.
+
+Even using a more conservative Bonferroni adjustment, 5/6 of the test sample's showed a significant deviation in sample mean.
